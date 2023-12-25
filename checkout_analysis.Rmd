@@ -1,0 +1,159 @@
+---
+title: "checkout_analysis"
+output:
+  pdf_document: default
+  html_document: default
+date: '2023-12-23'
+---
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+pc <- read.csv("/Users/yusei/Downloads/PC Checkouts c3e3593d6eeb4e3c9281c458e15746fa_all.csv")
+cs <- read.csv("/Users/yusei/Downloads/Console Checkouts a5b6e6a2fbd84994a6a246b5d6b75585_all.csv")
+queue <- read.csv("/Users/yusei/Downloads/Queue 614972dc6914443f8d8c90d7d8e9ead0_all.csv")
+```
+
+How do we get more money/resources for another gaming space? UCI has 60 computers. Lets get to that level. 
+
+```{r}
+#Removing unneccessary columns
+pc <- pc[,-c(1,4,5,6,7,8,10)]
+```
+
+```{r}
+#Cleaning the date time with lubridate
+pc$Check.In.Time <- mdy_hm(pc$Check.In.Time)
+```
+
+```{r}
+#Can see all entries from each proctor (maybe set this up for tableau dashboard)
+#pc[pc$Proctor == 'yussy',]
+```
+
+```{r}
+#not much can be gathered from this. further analysis required 
+pc %>%  filter(Check.In.Time > ymd(20231022)) %>% ggplot(aes(Check.In.Time)) + 
+  geom_freqpoly(binwidth =  600) #600 = 10 mins
+```
+
+```{r}
+#Total Days Open Per Day of the Week 
+days_open <- table(wday(unique(date(pc$Check.In.Time))))
+days_open <- as.data.frame(days_open)
+levels(days_open$Var1) <- c('Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday')
+days_open
+total_open <- ggplot(days_open, aes(x = Var1, y = Freq)) + geom_bar(stat = 'identity', aes(fill = Var1)) + scale_fill_brewer(palette = 'Set1') + ggtitle('Total Days Open This Quarter')
+png("total_open.png")
+print(total_open)
+dev.off()
+```
+
+```{r}
+#Number of People Per Day of Week Total 
+data <- as.data.frame(table(wday(pc$Check.In.Time))) 
+data$Avg_Freq <- data$Freq / days_open$Freq
+data$Avg_Freq <- round(data$Avg_Freq)
+levels(data$Var1) <- c('Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday')
+colnames(data) <- c('Weekday','Frequency', 'Average_Frequency')
+
+total_pc <- ggplot(data, aes(x = Weekday, y=Frequency)) + 
+  geom_bar(stat = "identity", aes(fill = Weekday)) + scale_fill_brewer(palette = "Set1") + ggtitle('Total Number of PC Players This Quarter')
+png("total_pc.png")
+print(total_pc)
+dev.off()
+```
+
+```{r}
+#Number of people Per Day of Week Averaged
+avg_pc <- ggplot(data, aes(x = Weekday, y=Average_Frequency)) + 
+  geom_bar(stat = "identity", aes(fill = Weekday)) + scale_fill_brewer(palette = "Set1") + ggtitle('Average Number of PC Players Per Day') + geom_text(aes(label = Average_Frequency), vjust = -0.3) 
+png("avg_pc.png")
+print(avg_pc)
+dev.off()
+```
+
+Console Data
+
+```{r}
+#Removing unneccessary columns
+cs <- cs[,-c(4,6,7,8,9,10,11)]
+```
+
+```{r}
+#Cleaning the date time with lubridate
+cs$Created.time <- mdy_hm(cs$Created.time)
+```
+
+```{r}
+#Number of People Per Day of Week Total 
+data <- as.data.frame(table(wday(cs$Created.time))) 
+data$Avg_Freq <- data$Freq / days_open$Freq
+data$Avg_Freq <- round(data$Avg_Freq)
+levels(data$Var1) <- c('Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday')
+colnames(data) <- c('Weekday','Frequency', 'Average_Frequency')
+
+total_cs <- ggplot(data, aes(x = Weekday, y=Frequency)) + 
+  geom_bar(stat = "identity", aes(fill = Weekday)) + scale_fill_brewer(palette = "Set1") + ggtitle('Total Number of Console Players This Quarter')
+png("total_cs.png")
+print(total_cs)
+dev.off()
+```
+
+```{r}
+#Number of people Per Day of Week Averaged
+avg_cs <- ggplot(data, aes(x = Weekday, y=Average_Frequency)) + 
+  geom_bar(stat = "identity", aes(fill = Weekday)) + scale_fill_brewer(palette = "Set1") + ggtitle('Average Number of Console Players Per Day') + geom_text(aes(label = Average_Frequency), vjust = -0.3) 
+png("avg_cs.png")
+print(avg_cs)
+dev.off()
+```
+
+Queue Analysis
+
+```{r}
+#Data Cleaning
+queue <- queue[-1,-c(1,2,3,4,5,7)]
+queue$Created.time <- mdy_hm(queue$Created.time)
+queue$Last.edited.time <- mdy_hm(queue$Last.edited.time)
+
+#Get weekday for each observation
+queue$wday <- wday(queue$Created.time)
+
+#get time each person waited 
+queue$wait <- queue$Last.edited.time - queue$Created.time
+queue$wait <- as.numeric(gsub("\\D", "", queue$wait))
+```
+
+```{r}
+#Total People In Queue
+people <- queue %>% group_by(wday) %>% count()
+n <- people$n
+```
+
+
+```{r}
+wait_times <- queue %>% group_by(wday) %>% summarise(total = sum(wait)) 
+wait_times$total <- wait_times$total / 60
+
+wait_times <- as.data.frame(wait_times)
+wait_times$wday <- as.factor(wait_times$wday)
+levels(wait_times$wday) <- c('Sunday','Monday','Tuesday','Wednesday','Thursday','Friday')
+
+#Total Wait Time Per Day 
+total_wait <- ggplot(wait_times, aes(x = wday, y = total)) + geom_bar(stat = "identity", aes(fill = wday)) + scale_fill_brewer(palette = "Set1") +  ggtitle('Total Wait Time For a PC') 
+png("total_wait.png")
+print(total_wait)
+dev.off()
+```
+```{r}
+#Average wait per person Seperated By Day 
+wait_times$total <- wait_times$total / n
+wait_times$total <- round(wait_times$total)
+
+avg_wait <- ggplot(wait_times, aes(x = wday, y = total)) + geom_bar(stat = "identity", aes(fill = wday)) + scale_fill_brewer(palette = "Set1") + ggtitle('Average Wait Time Per Customer for a PC') + geom_text(aes(label = total), vjust = -0.3)
+png("avg_wait.png")
+print(avg_wait)
+dev.off()
+```
